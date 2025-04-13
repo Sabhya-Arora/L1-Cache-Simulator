@@ -15,7 +15,7 @@ void print_help() {
 vector<pair<char, int>> read_trace_files(const string& base_name, int i) {
     vector<pair<char, int>> lines;
 
-    string filename = base_name + "_proc" + to_string(i) + ".trace";
+    string filename = "traces/" + base_name + "_proc" + to_string(i) + ".trace";
     ifstream infile(filename);
 
     if (!infile) {
@@ -50,7 +50,7 @@ vector<vector<int>> create_cache (int num_sets, int num_ways, int block_size) {
 }
 
 vector<vector<int>> create_tag (int num_sets, int num_ways) {
-    vector<vector<int>> tag (num_sets, vector<int>(num_ways, 0));
+    vector<vector<int>> tag (num_sets, vector<int>(num_ways, -1));
     return tag;
 }
 
@@ -110,17 +110,47 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Print parsed arguments (for debugging)
-    cout << "Tracefile: " << tracefile << "\n";
-    cout << "s: " << s << ", E: " << E << ", b: " << b << "\n";
-    cout << "Output file: " << outfile << "\n";
+    // // Print parsed arguments (for debugging)
+    // cout << "Tracefile: " << tracefile << "\n";
+    // cout << "s: " << s << ", E: " << E << ", b: " << b << "\n";
+    // cout << "Output file: " << outfile << "\n";
 
     // Your simulation logic goes here...
-    vector<pair<char, int>> inst_proc0 = read_trace_files(tracefile, 0);
-    vector<pair<char, int>> inst_proc1 = read_trace_files(tracefile, 1);
-    vector<pair<char, int>> inst_proc2 = read_trace_files(tracefile, 2);
-    vector<pair<char, int>> inst_proc3 = read_trace_files(tracefile, 3);
-    
+    vector<vector<pair<char, int>>> inst_proc(4);
+    inst_proc[0] = read_trace_files(tracefile, 0);
+    inst_proc[1] = read_trace_files(tracefile, 1);
+    inst_proc[2] = read_trace_files(tracefile, 2);
+    inst_proc[3] = read_trace_files(tracefile, 3);
+    vector<vector<vector<int>>> cache(4);
+    for (int i = 0; i < 4; i++) {
+        cache[i] = create_cache(1 << s, E, 1 << b);
+    }
+    vector<vector<vector<int>>> tag(4);
+    for (int i = 0; i < 4; i++) {
+        tag[i] = create_tag(1 << s, E);
+    }
+    int num_sets = cache.size();
+    int num_ways = tag[0].size();
+    cout<<"Number of read instructions per core: "<<"\n";
+    for (int i = 0; i < 4; i++) {
+        int read_count = 0;
+        for (const auto& line : inst_proc[i]) {
+            if (line.first == 'R') {
+                read_count++;
+            }
+        }
+        cout << "Core " << i << ": " << read_count << "\n";
+    }
+    cout<<"Number of write instructions per core: "<<"\n";
+    for (int i = 0; i < 4; i++) {
+        int write_count = 0;
+        for (const auto& line : inst_proc[i]) {
+            if (line.first == 'W') {
+                write_count++;
+            }
+        }
+        cout << "Core " << i << ": " << write_count << "\n";
+    }
 
     return 0;
 }
