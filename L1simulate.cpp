@@ -7,6 +7,14 @@ enum Cache_Line_State {
     S,
     I
 };
+
+struct BusTransaction {
+    int proc_id;        // ID of processor issuing the request
+    int address;        // memory address
+    int cycles_remaining; // time remaining for the transaction
+    bool this_cycle;
+};
+
 void print_help() {
     cout << "Usage: ./L1simulate [options]\n"
               << "-t <tracefile> : name of parallel application (e.g., app1) whose 4 traces are to be used\n"
@@ -17,7 +25,41 @@ void print_help() {
               << "-h             : print this help message\n";
 }
 
-int curr_time = 0;
+int curr_cycle = 0;
+vector<vector<priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>>>> lru(4); // (last access time, index of way in tag)
+vector<vector<vector<int>>> cache(4);
+vector<vector<vector<int>>> tag(4);
+vector<vector<pair<char, int>>> inst_proc(4);
+vector<vector<bool>> is_full(4);
+vector<struct BusTransaction> bus;
+vector<int> curr_inst(4, 0);
+vector<bool> stall(4, false);
+int num_sets, num_ways, block_size;
+void snoop(int proc_id) {
+    // Snoop on the bus using data in its cache
+    for (int i = 0; i < bus.size(); i++) {
+        if (bus[i].proc_id != proc_id) {
+            int address = bus[i].address;
+            int offset = address % block_size;
+            address /= block_size;
+            int index = address % num_sets;
+            address /= num_sets;
+            int tag_value = address;
+            for (int j = 0; j < num_ways; j++) {
+                if (tag[proc_id][index][j] == tag_value) {
+                    // Found the address in the cache
+                    if (bus[i].this_cycle) {
+                        // Update the state of the cache line
+                        if (bus[i].cycles_remaining == 0) {
+                            // Update the state to I
+                            tag[proc_id][index][j] = I;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 bool comp(const pair<int, int>& a, const pair<int, int>& b) {
     return a.second < b.second; // max-heap by second
@@ -88,7 +130,7 @@ bool find_addr (int address, vector<vector<int>> &cache, vector<vector<int>> &ta
     }
     return false;
 }
-void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, int address, vector<bool> &is_full) {
+void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, int address, vector<bool> &is_full, int proc_id) {
     int num_sets = cache.size();
     int num_ways = tag[0].size();
     int block_size = cache[0].size() / num_ways;
@@ -98,12 +140,13 @@ void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, in
     address/=num_sets;
     int tag_value = address;
     if (is_full[index]) {
-        // call LRU
+        LRU(address, cache, tag, proc_id);
     } else {
         int i = 0;
         for (i = 0; i < num_ways; i++) {
             if (tag[index][i] == -1) {
                 tag[index][i] = tag_value;
+                lru[proc_id][index].push({curr_cycle, i}); // update LRU
                 break;
             }
         }
@@ -112,7 +155,8 @@ void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, in
         }
     }
 }
-void LRU (int address, vector<vector<int>> &cache, vector<vector<int>> &tag, priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> &lru) {
+
+void LRU (int address, vector<vector<int>> &cache, vector<vector<int>> &tag, int proc_id) {
     int num_sets = cache.size();
     int num_ways = tag[0].size();
     int block_size = cache[0].size() / num_ways;
@@ -121,10 +165,10 @@ void LRU (int address, vector<vector<int>> &cache, vector<vector<int>> &tag, pri
     int index = address % num_sets;
     address/=num_sets;
     int tag_value = address;
-    int way_to_remove = (lru.top()).second;
-    lru.pop();
+    int way_to_remove = (lru[proc_id][index].top()).second;
+    lru[proc_id][index].pop();
     tag[index][way_to_remove] = tag_value; // insert new cache block
-    lru.push({curr_time, way_to_remove}); // update LRU
+    lru[proc_id][index].push({curr_cycle, way_to_remove}); // update LRU
 }
 
 int main(int argc, char* argv[]) {
@@ -172,22 +216,19 @@ int main(int argc, char* argv[]) {
     // cout << "Output file: " << outfile << "\n";
 
     // Your simulation logic goes here...
-    vector<vector<pair<char, int>>> inst_proc(4);
     inst_proc[0] = read_trace_files(tracefile, 0);
     inst_proc[1] = read_trace_files(tracefile, 1);
     inst_proc[2] = read_trace_files(tracefile, 2);
     inst_proc[3] = read_trace_files(tracefile, 3);
-    vector<vector<vector<int>>> cache(4);
-    vector<vector<vector<int>>> tag(4);
-    priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> lru; // (last access time, index of way in tag)
     for (int i = 0; i < 4; i++) {
         cache[i] = create_cache(1 << s, E, 1 << b);
-    }
-    for (int i = 0; i < 4; i++) {
         tag[i] = create_tag(1 << s, E);
+        is_full[i] = create_is_full(1 << s);
+        lru[i] = vector<priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>>> (1 << s);
     }
-    int num_sets = cache.size();
-    int num_ways = tag[0].size();
+    num_sets = cache.size();
+    num_ways = tag[0].size();
+    block_size = cache[0].size() / num_ways;
     cout<<"Number of read instructions per core: "<<"\n";
     for (int i = 0; i < 4; i++) {
         int read_count = 0;
@@ -208,6 +249,29 @@ int main(int argc, char* argv[]) {
         }
         cout << "Core " << i << ": " << write_count << "\n";
     }
+    while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
+        for (auto req:bus) {
+            req.this_cycle = false;
+        }
+        // Snooping
+        // Core 0
+        // Snoop on the bus using data in its cache
+        // Core 1
+        // Snoop on the bus using data in its cache
+        // Core 2
+        // Snoop on the bus using data in its cache
+        // Core 3
+        // Snoop on the bus using data in its cache
+        // Initialize bus transactions if any
+        // Core 0
 
+        // Core 1
+
+        // Core 2
+
+        // Core 3
+        
+
+    }
     return 0;
 }
