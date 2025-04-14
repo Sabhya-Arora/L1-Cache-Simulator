@@ -1,6 +1,12 @@
 #include <bits/stdc++.h>
 using namespace std;
-
+enum Cache_Line_State {
+    U = -1,
+    M,
+    E,
+    S,
+    I
+};
 void print_help() {
     cout << "Usage: ./L1simulate [options]\n"
               << "-t <tracefile> : name of parallel application (e.g., app1) whose 4 traces are to be used\n"
@@ -53,8 +59,15 @@ vector<vector<int>> create_tag (int num_sets, int num_ways) {
     vector<vector<int>> tag (num_sets, vector<int>(num_ways, -1));
     return tag;
 }
-
-bool find_addr (int address, vector<vector<int>> cache, vector<vector<int>> tag) {
+vector<bool> create_is_full (int num_sets) {
+    vector<bool> is_full (num_sets, false);
+    return is_full;
+}
+vector<vector<int>> initialize_states (int num_sets, int num_ways) {
+    vector<vector<int>> states(num_sets, vector<int>(num_ways, U));
+    return states;
+}
+bool find_addr (int address, vector<vector<int>> &cache, vector<vector<int>> &tag) {
     int num_sets = cache.size();
     int num_ways = tag[0].size();
     int block_size = cache[0].size() / num_ways;
@@ -70,7 +83,30 @@ bool find_addr (int address, vector<vector<int>> cache, vector<vector<int>> tag)
     }
     return false;
 }
-
+void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, int address, vector<bool> &is_full) {
+    int num_sets = cache.size();
+    int num_ways = tag[0].size();
+    int block_size = cache[0].size() / num_ways;
+    int offset = address % block_size;
+    address/=block_size;
+    int index = address % num_sets;
+    address/=num_sets;
+    int tag_value = address;
+    if (is_full[index]) {
+        // call LRU
+    } else {
+        int i = 0;
+        for (i = 0; i < num_ways; i++) {
+            if (tag[index][i] == -1) {
+                tag[index][i] = tag_value;
+                break;
+            }
+        }
+        if (i == num_ways) {
+            is_full[index] = true;
+        }
+    }
+}
 int main(int argc, char* argv[]) {
     string tracefile;
     string outfile;
