@@ -11,6 +11,11 @@ void print_help() {
               << "-h             : print this help message\n";
 }
 
+int curr_time = 0;
+
+bool comp(const pair<int, int>& a, const pair<int, int>& b) {
+    return a.second < b.second; // max-heap by second
+}
 
 vector<pair<char, int>> read_trace_files(const string& base_name, int i) {
     vector<pair<char, int>> lines;
@@ -71,6 +76,21 @@ bool find_addr (int address, vector<vector<int>> cache, vector<vector<int>> tag)
     return false;
 }
 
+void LRU (int address, vector<vector<int>> &cache, vector<vector<int>> &tag, priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> &lru) {
+    int num_sets = cache.size();
+    int num_ways = tag[0].size();
+    int block_size = cache[0].size() / num_ways;
+    int offset = address % block_size;
+    address/=block_size;
+    int index = address % num_sets;
+    address/=num_sets;
+    int tag_value = address;
+    int way_to_remove = (lru.top()).second;
+    lru.pop();
+    tag[index][way_to_remove] = tag_value; // insert new cache block
+    lru.push({curr_time, way_to_remove}); // update LRU
+}
+
 int main(int argc, char* argv[]) {
     string tracefile;
     string outfile;
@@ -122,10 +142,11 @@ int main(int argc, char* argv[]) {
     inst_proc[2] = read_trace_files(tracefile, 2);
     inst_proc[3] = read_trace_files(tracefile, 3);
     vector<vector<vector<int>>> cache(4);
+    vector<vector<vector<int>>> tag(4);
+    priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> lru; // (last access time, index of way in tag)
     for (int i = 0; i < 4; i++) {
         cache[i] = create_cache(1 << s, E, 1 << b);
     }
-    vector<vector<vector<int>>> tag(4);
     for (int i = 0; i < 4; i++) {
         tag[i] = create_tag(1 << s, E);
     }
