@@ -251,6 +251,7 @@ int main(int argc, char* argv[]) {
     }
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
         for (auto req:bus) {
+            req.cycles_remaining--;
             req.this_cycle = false;
         }
         // Snooping
@@ -264,7 +265,7 @@ int main(int argc, char* argv[]) {
         // Snoop on the bus using data in its cache
         // Initialize bus transactions if any
         // Core 0
-
+    
         // Core 1
 
         // Core 2
