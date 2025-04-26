@@ -31,29 +31,27 @@ vector<vector<vector<int>>> cache(4);
 vector<vector<vector<int>>> tag(4);
 vector<vector<pair<char, int>>> inst_proc(4);
 vector<vector<bool>> is_full(4);
-vector<struct BusTransaction> bus;
+struct BusTransaction bus;
 vector<int> curr_inst(4, 0);
 vector<bool> stall(4, false);
 int num_sets, num_ways, block_size;
 void snoop(int proc_id) {
     // Snoop on the bus using data in its cache
-    for (int i = 0; i < bus.size(); i++) {
-        if (bus[i].proc_id != proc_id) {
-            int address = bus[i].address;
-            int offset = address % block_size;
-            address /= block_size;
-            int index = address % num_sets;
-            address /= num_sets;
-            int tag_value = address;
-            for (int j = 0; j < num_ways; j++) {
-                if (tag[proc_id][index][j] == tag_value) {
-                    // Found the address in the cache
-                    if (bus[i].this_cycle) {
-                        // Update the state of the cache line
-                        if (bus[i].cycles_remaining == 0) {
-                            // Update the state to I
-                            tag[proc_id][index][j] = I;
-                        }
+    if (bus.proc_id != proc_id) {
+        int address = bus.address;
+        int offset = address % block_size;
+        address /= block_size;
+        int index = address % num_sets;
+        address /= num_sets;
+        int tag_value = address;
+        for (int j = 0; j < num_ways; j++) {
+            if (tag[proc_id][index][j] == tag_value) {
+                // Found the address in the cache
+                if (bus.this_cycle) {
+                    // Update the state of the cache line
+                    if (bus.cycles_remaining == 0) {
+                        // Update the state to I
+                        tag[proc_id][index][j] = I;
                     }
                 }
             }
@@ -250,9 +248,7 @@ int main(int argc, char* argv[]) {
         cout << "Core " << i << ": " << write_count << "\n";
     }
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
-        for (auto req:bus) {
-            req.this_cycle = false;
-        }
+        bus.this_cycle = true; // true implies this req has not been processed in this clk cycle
         // Snooping
         // Core 0
         // Snoop on the bus using data in its cache
