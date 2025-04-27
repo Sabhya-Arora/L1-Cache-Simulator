@@ -15,6 +15,8 @@ struct BusTransaction {
     bool read;
     bool mem;
     bool rwitm;
+    bool invalidate;
+    bool eviction;
 };
 
 void print_help() {
@@ -37,6 +39,7 @@ vector<vector<bool>> is_full(4);
 vector<int> curr_inst(4, 0);
 vector<bool> stall(4, false);
 int num_sets, num_ways, block_size;
+deque <struct BusTransaction> pending;
 
 bool comp(const pair<int, int>& a, const pair<int, int>& b) {
     return a.second < b.second; // max-heap by second
@@ -161,8 +164,18 @@ void LRU (int address, vector<vector<int>> &cache, vector<vector<int>> &tag, int
     address/=num_sets;
     int tag_value = address;
     int way_to_remove = (lru[proc_id][index].top()).second;
+
     lru[proc_id][index].pop();
+    int old_tag = tag[index][way_to_remove];
+    int old_addr = old_tag*num_sets*block_size + index*block_size + offset;
+    int old_state = states[proc_id][index][way_to_remove];
+    if (old_state==M){
+        struct BusTransaction new_req = {proc_id,old_addr, 100, false,false, false, false, true};
+        pending.push_front(new_req);
+        stall[proc_id] = true;
+    }
     tag[index][way_to_remove] = tag_value; // insert new cache block
+
     lru[proc_id][index].push({curr_cycle, way_to_remove}); // update LRU
 }
 
@@ -245,7 +258,7 @@ int main(int argc, char* argv[]) {
         }
         cout << "Core " << i << ": " << write_count << "\n";
     }
-    queue<struct BusTransaction> pending;
+    
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
         // Snooping
         // Core 0
@@ -256,29 +269,37 @@ int main(int argc, char* argv[]) {
                 int comp_id = completed.proc_id;
 
                 stall[comp_id] = false;
-                insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
+                if(completed.invalidate){
+                    set_state(comp_id, tag[comp_id], states[comp_id], M);
+                    for(int i = 0; i<4; i++){
+                        if(i!=comp_id) set_state(i, tag[i], states[i], I);
+                    }
+                }
                 if (completed.rwitm)  { // set state to M (and others to I)
                     set_state(completed.address, tag[comp_id], states[comp_id], M);
                     for (int i = 0; i < 4; i++) {
                         if (i == comp_id) continue;
                         set_state(completed.address, tag[i], states[i], I);
                     }
+                    insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
                 }
-                if (completed.read) {
+                else if (completed.read) {
                     set_state(completed.address, tag[comp_id], states[comp_id], E);
                     bool found = false;
                     for (int i = 0; i < 4; i++) {
                         if (i == comp_id) continue;
-                        int other_state;
-                        if (obtain_state(completed.address, tag[i], states[i]) != U && ;
-                    }
-                    set_state(completed.address, tag[comp_id], states[comp_id], S);
-                    for (int i = 0; i < 4; i++) {
-                        if (i == comp_id) continue;
-                        set_state(completed.address, tag[i], states[i], S);
-                    }
+                        int other_state = obtain_state(completed.address, tag[i], states[i]);
+                        if (other_state != U && other_state!=I) {
+                            set_state(completed.address,tag[0],states[0],S);
+                            set_state(completed.address,tag[1],states[1],S);
+                            set_state(completed.address,tag[2],states[2],S);
+                            set_state(completed.address,tag[3],states[3],S);
+                            break;
+                        }
+                    }                   
+                    insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
                 }
-                pending.pop();
+                pending.pop_front();
                 if (!pending.empty()) { // initiating transaction
                     struct BusTransaction trans = pending.front();
                     bool found = false;
@@ -353,20 +374,27 @@ int main(int argc, char* argv[]) {
                     if (this_inst.first == 'R') {
                         int state = obtain_state(this_inst.second, tag[i], states[i]);
                         if (state == I || state == U) {
-                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false};
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, false, false};
                             stall[i] = true;
-                            pending.push(new_req);
+                            pending.push_back(new_req);
                         } else {
                             curr_inst[i]++;
                         }
                     } else {
                         int state = obtain_state(this_inst.second, tag[i], states[i]);
                         if (state == I || state == U) {
-                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false};
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, false, false};
                             stall[i] = true;
-                            pending.push(new_req);
-                        } else {
+                            pending.push_back(new_req);
+                        }
+                        else if (state == M || state==E){
+                            set_state(this_inst.second, tag[i], states[i], M);
                             curr_inst[i]++;
+                        }
+                        else {
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, true, false};
+                            pending.push_back(new_req);
+                            stall[i] = true;
                         }
                     }
                 }
