@@ -12,7 +12,9 @@ struct BusTransaction {
     int proc_id;        // ID of processor issuing the request
     int address;        // memory address
     int cycles_remaining; // time remaining for the transaction
-    bool this_cycle;
+    bool read;
+    bool mem;
+    bool rwitm;
 };
 
 void print_help() {
@@ -28,39 +30,50 @@ void print_help() {
 int curr_cycle = 0;
 vector<vector<priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>>>> lru(4); // (last access time, index of way in tag)
 vector<vector<vector<int>>> cache(4);
+vector<vector<vector<int>>> states(4);
 vector<vector<vector<int>>> tag(4);
 vector<vector<pair<char, int>>> inst_proc(4);
 vector<vector<bool>> is_full(4);
-struct BusTransaction bus;
 vector<int> curr_inst(4, 0);
 vector<bool> stall(4, false);
 int num_sets, num_ways, block_size;
-void snoop(int proc_id) {
-    // Snoop on the bus using data in its cache
-    if (bus.proc_id != proc_id) {
-        int address = bus.address;
-        int offset = address % block_size;
-        address /= block_size;
-        int index = address % num_sets;
-        address /= num_sets;
-        int tag_value = address;
-        for (int j = 0; j < num_ways; j++) {
-            if (tag[proc_id][index][j] == tag_value) {
-                // Found the address in the cache
-                if (bus.this_cycle) {
-                    // Update the state of the cache line
-                    if (bus.cycles_remaining == 0) {
-                        // Update the state to I
-                        tag[proc_id][index][j] = I;
-                    }
-                }
-            }
-        }
-    }
-}
 
 bool comp(const pair<int, int>& a, const pair<int, int>& b) {
     return a.second < b.second; // max-heap by second
+}
+
+int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states) {
+    int num_sets = tag.size();
+    int num_ways = tag[0].size();
+    int block_size = tag[0].size();
+    int offset = address % block_size;
+    address/=block_size;
+    int index = address % num_sets;
+    address/=num_sets;
+    int tag_value = address;
+    for (int i = 0; i < num_ways; i++) {
+        if (tag[index][i] == tag_value) {
+            return states[index][i];
+        }
+    }
+    return U;
+}
+
+void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states, int state) {
+    int num_sets = tag.size();
+    int num_ways = tag[0].size();
+    int block_size = tag[0].size()/ num_ways;
+    int offset = address % block_size;
+    address/=block_size;
+    int index = address % num_sets;
+    address/=num_sets;
+    int tag_value = address;
+    for (int i = 0; i < num_ways; i++) {
+        if (tag[index][i] == tag_value) {
+            states[index][i] = state;
+            return;
+        }
+    }
 }
 
 vector<pair<char, int>> read_trace_files(const string& base_name, int i) {
@@ -111,22 +124,6 @@ vector<bool> create_is_full (int num_sets) {
 vector<vector<int>> initialize_states (int num_sets, int num_ways) {
     vector<vector<int>> states(num_sets, vector<int>(num_ways, U));
     return states;
-}
-bool find_addr (int address, vector<vector<int>> &cache, vector<vector<int>> &tag) {
-    int num_sets = cache.size();
-    int num_ways = tag[0].size();
-    int block_size = cache[0].size() / num_ways;
-    int offset = address % block_size;
-    address/=block_size;
-    int index = address % num_sets;
-    address/=num_sets;
-    int tag_value = address;
-    for (int i = 0; i < num_ways; i++) {
-        if (tag[index][i] == tag_value) {
-            return true;
-        }
-    }
-    return false;
 }
 void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, int address, vector<bool> &is_full, int proc_id) {
     int num_sets = cache.size();
@@ -223,6 +220,7 @@ int main(int argc, char* argv[]) {
         tag[i] = create_tag(1 << s, E);
         is_full[i] = create_is_full(1 << s);
         lru[i] = vector<priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>>> (1 << s);
+        states[i] = initialize_states(num_sets, num_ways);
     }
     num_sets = cache.size();
     num_ways = tag[0].size();
@@ -247,27 +245,134 @@ int main(int argc, char* argv[]) {
         }
         cout << "Core " << i << ": " << write_count << "\n";
     }
+    queue<struct BusTransaction> pending;
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
-        bus.this_cycle = true; // true implies this req has not been processed in this clk cycle
         // Snooping
         // Core 0
         // Snoop on the bus using data in its cache
+        if (!pending.empty()) { // transactions on the bus
+            if (pending.front().cycles_remaining == 0) {
+                struct BusTransaction completed = pending.front();
+                int comp_id = completed.proc_id;
+
+                stall[comp_id] = false;
+                insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
+                if (completed.rwitm)  { // set state to M (and others to I)
+                    set_state(completed.address, tag[comp_id], states[comp_id], M);
+                    for (int i = 0; i < 4; i++) {
+                        if (i == comp_id) continue;
+                        set_state(completed.address, tag[i], states[i], I);
+                    }
+                }
+                if (completed.read) {
+                    set_state(completed.address, tag[comp_id], states[comp_id], E);
+                    bool found = false;
+                    for (int i = 0; i < 4; i++) {
+                        if (i == comp_id) continue;
+                        int other_state;
+                        if (obtain_state(completed.address, tag[i], states[i]) != U && ;
+                    }
+                    set_state(completed.address, tag[comp_id], states[comp_id], S);
+                    for (int i = 0; i < 4; i++) {
+                        if (i == comp_id) continue;
+                        set_state(completed.address, tag[i], states[i], S);
+                    }
+                }
+                pending.pop();
+                if (!pending.empty()) { // initiating transaction
+                    struct BusTransaction trans = pending.front();
+                    bool found = false;
+                    int ind = 0;
+                    if (trans.read) {
+                        for (int i = 0; i < 4; i++) {
+                            if (i == trans.proc_id) continue; // this processor cannot snoop on self request
+                            int state = obtain_state(trans.address, tag[i], states[i]);
+                            if (state == E || state == S) {
+                                found = true;
+                                ind = i;
+                                break;
+                            } else if (state == M) { // 2N then 100
+                                found = true;
+                                ind = i;
+                                trans.mem = true;
+                                trans.cycles_remaining = 2*block_size + 100; // stall shifting
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            trans.cycles_remaining = 100;
+                            trans.mem = true;
+                        }
+                    } else { // write miss
+                        for (int i = 0; i < 4; i++) {
+                            if (i == trans.proc_id) continue; // this processor cannot snoop on self request
+                            int state = obtain_state(trans.address, tag[i], states[i]);
+                            if (state == E || state == S) {
+                                found = true;
+                                ind = i;
+                                trans.mem = true;
+                                trans.cycles_remaining = 100;
+                                trans.rwitm = true;
+                                break;
+                            } else if (state == M) { // 100 to mem then 100 from mem
+                                found = true;
+                                ind = i;
+                                trans.mem = true;
+                                trans.cycles_remaining = 200;
+                                trans.rwitm = true;
+                            }
+                        }
+                        if (!found) {
+                            trans.mem = true;
+                            trans.rwitm = true;
+                            trans.cycles_remaining = 100;
+                        }
+                    }
+                }
+            } else { // transaction in progress
+                pending.front().cycles_remaining--;
+                if (pending.front().mem && pending.front().cycles_remaining == 100 && pending.front().rwitm == false) { // now snooping continues writing to mem, seeker gets value
+                    stall[pending.front().proc_id] = false;
+                }
+            }
+        }
         // Core 1
         // Snoop on the bus using data in its cache
         // Core 2
         // Snoop on the bus using data in its cache
         // Core 3
         // Snoop on the bus using data in its cache
+
+
         // Initialize bus transactions if any
         // Core 0
-
-        // Core 1
-
-        // Core 2
-
-        // Core 3
-        
-
+        for (int i = 0; i < 4; i++) {
+            if (curr_inst[i] < inst_proc[i].size()) {
+                pair<char, int> this_inst = inst_proc[i][curr_inst[i]];
+                if (!stall[i]) {
+                    if (this_inst.first == 'R') {
+                        int state = obtain_state(this_inst.second, tag[i], states[i]);
+                        if (state == I || state == U) {
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false};
+                            stall[i] = true;
+                            pending.push(new_req);
+                        } else {
+                            curr_inst[i]++;
+                        }
+                    } else {
+                        int state = obtain_state(this_inst.second, tag[i], states[i]);
+                        if (state == I || state == U) {
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false};
+                            stall[i] = true;
+                            pending.push(new_req);
+                        } else {
+                            curr_inst[i]++;
+                        }
+                    }
+                }
+            }
+        }
+        curr_cycle++;
     }
     return 0;
 }
