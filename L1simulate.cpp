@@ -30,10 +30,10 @@ void print_help() {
 }
 
 int curr_cycle = 0;
-vector<vector<priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>>>> lru(4); // (last access time, index of way in tag)
 vector<vector<vector<int>>> cache(4);
 vector<vector<vector<int>>> states(4);
 vector<vector<vector<int>>> tag(4);
+vector<vector<vector<int>>> access_times(4);
 vector<vector<pair<char, int>>> inst_proc(4);
 vector<vector<bool>> is_full(4);
 vector<int> curr_inst(4, 0);
@@ -46,9 +46,6 @@ bool comp(const pair<int, int>& a, const pair<int, int>& b) {
 }
 
 int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states) {
-    int num_sets = tag.size();
-    int num_ways = tag[0].size();
-    int block_size = tag[0].size();
     int offset = address % block_size;
     address/=block_size;
     int index = address % num_sets;
@@ -63,9 +60,7 @@ int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &st
 }
 
 void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states, int state) {
-    int num_sets = tag.size();
-    int num_ways = tag[0].size();
-    int block_size = tag[0].size()/ num_ways;
+    int temp = address;
     int offset = address % block_size;
     address/=block_size;
     int index = address % num_sets;
@@ -74,9 +69,17 @@ void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &stat
     for (int i = 0; i < num_ways; i++) {
         if (tag[index][i] == tag_value) {
             states[index][i] = state;
+            cout<<"Successfully changed state"<<endl;
+            cout << "State of address in set " << temp << " in processor " << i << ": ";
+            if (states[index][i] == M) cout << "M\n";    
+            else if (states[index][i] == E) cout << "E\n";
+            else if (states[index][i] == S) cout << "S\n";
+            else if (states[index][i] == I) cout << "I\n";
+            else cout << "U\n";
             return;
         }
     }
+    
 }
 
 vector<pair<char, int>> read_trace_files(const string& base_name, int i) {
@@ -120,6 +123,10 @@ vector<vector<int>> create_tag (int num_sets, int num_ways) {
     vector<vector<int>> tag (num_sets, vector<int>(num_ways, -1));
     return tag;
 }
+vector<vector<int>> create_access_times (int num_sets, int num_ways) {
+    vector<vector<int>> access_times (num_sets, vector<int>(num_ways, -1));
+    return access_times;
+}
 vector<bool> create_is_full (int num_sets) {
     vector<bool> is_full (num_sets, false);
     return is_full;
@@ -128,23 +135,88 @@ vector<vector<int>> initialize_states (int num_sets, int num_ways) {
     vector<vector<int>> states(num_sets, vector<int>(num_ways, U));
     return states;
 }
+
+void LRU(int address, vector<vector<int>> &cache, vector<vector<int>> &tag, int proc_id) {
+    cout<<address<<endl;
+    int offset = address % block_size;
+    address /= block_size;
+    int index = address % num_sets;
+    address /= num_sets;
+    int tag_value = address;
+
+    // Find the way to replace: least recently used (smallest access time)
+    int way_to_remove = 0;
+    int min_time = INT_MAX;
+    for (int way = 0; way < num_ways; ++way) {
+        if (access_times[proc_id][index][way] < min_time) {
+            min_time = access_times[proc_id][index][way];
+            way_to_remove = way;
+        }
+    }
+    cout<<"LRU way is "<<way_to_remove<<endl;
+    int old_tag = tag[index][way_to_remove];
+    int old_addr = old_tag * num_sets * block_size + index * block_size + offset;
+    int old_state = states[proc_id][index][way_to_remove];
+    
+    if (old_state == M) {
+        struct BusTransaction new_req = {proc_id, old_addr, 100, false, false, false, false, true};
+        pending.pop_front();
+        pending.push_front(new_req);
+        stall[proc_id] = true;
+        cout<<"Stalling processor " << proc_id << " for eviction\n";
+        cout<<pending.front().cycles_remaining<<endl;
+        // exit(1);
+    }
+    // Replace with new block
+    // cout address replaced with new address
+    cout << "Replacing address " << old_addr << " with address " << address * num_sets * block_size + index * block_size + offset << "\n";
+    cout<<address<<" "<<index<<" "<<offset<<"\n";
+    tag[index][way_to_remove] = tag_value;
+    
+    // Update access time for this way
+    access_times[proc_id][index][way_to_remove] = curr_cycle;
+    // exit(1);
+}
+
+void update_access_time(int address, int proc_id) {
+        // Update access time for LRU
+    int offset = address % block_size;
+    int addr = address / block_size;
+    int index = addr % num_sets;
+    addr /= num_sets;
+    int tag_val = addr;
+    for (int way = 0; way < num_ways; ++way) {
+        if (tag[proc_id][index][way] == tag_val) {
+            access_times[proc_id][index][way] = curr_cycle;
+            cout<<"Access time updated for address " << address << " in processor " << proc_id << "\n";
+            cout << "New access time: " << access_times[proc_id][index][way] << "\n";
+            break;
+        }
+    }
+
+}
+
 void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, int address, vector<bool> &is_full, int proc_id) {
-    int num_sets = cache.size();
-    int num_ways = tag[0].size();
-    int block_size = cache[0].size() / num_ways;
+    int temp = address;
     int offset = address % block_size;
     address/=block_size;
     int index = address % num_sets;
     address/=num_sets;
     int tag_value = address;
     if (is_full[index]) {
-        LRU(address, cache, tag, proc_id);
+        // cout information
+        cout << "Cache is full for index " << index << "\n";
+        cout << "Evicting line with tag " << tag[index][0] << "\n";
+        cout << "Address in tag with this index: " << tag[index][1] * num_sets * block_size + index * block_size + offset << "\n";
+        cout << "Processor ID: " << proc_id << "\n";
+        // exit(1);
+        LRU(temp, cache, tag, proc_id);
     } else {
         int i = 0;
         for (i = 0; i < num_ways; i++) {
             if (tag[index][i] == -1) {
                 tag[index][i] = tag_value;
-                lru[proc_id][index].push({curr_cycle, i}); // update LRU
+                access_times[proc_id][index][i] = curr_cycle;
                 break;
             }
         }
@@ -154,30 +226,7 @@ void insert_cache_line (vector<vector<int>> &cache, vector<vector<int>> &tag, in
     }
 }
 
-void LRU (int address, vector<vector<int>> &cache, vector<vector<int>> &tag, int proc_id) {
-    int num_sets = cache.size();
-    int num_ways = tag[0].size();
-    int block_size = cache[0].size() / num_ways;
-    int offset = address % block_size;
-    address/=block_size;
-    int index = address % num_sets;
-    address/=num_sets;
-    int tag_value = address;
-    int way_to_remove = (lru[proc_id][index].top()).second;
 
-    lru[proc_id][index].pop();
-    int old_tag = tag[index][way_to_remove];
-    int old_addr = old_tag*num_sets*block_size + index*block_size + offset;
-    int old_state = states[proc_id][index][way_to_remove];
-    if (old_state==M){
-        struct BusTransaction new_req = {proc_id,old_addr, 100, false,false, false, false, true};
-        pending.push_front(new_req);
-        stall[proc_id] = true;
-    }
-    tag[index][way_to_remove] = tag_value; // insert new cache block
-
-    lru[proc_id][index].push({curr_cycle, way_to_remove}); // update LRU
-}
 
 int main(int argc, char* argv[]) {
     string tracefile;
@@ -232,43 +281,92 @@ int main(int argc, char* argv[]) {
         cache[i] = create_cache(1 << s, E, 1 << b);
         tag[i] = create_tag(1 << s, E);
         is_full[i] = create_is_full(1 << s);
-        lru[i] = vector<priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>>> (1 << s);
-        states[i] = initialize_states(num_sets, num_ways);
+        states[i] = initialize_states(1 << s, E);
+        access_times[i] = create_access_times(1 << s, E);
     }
-    num_sets = cache.size();
-    num_ways = tag[0].size();
-    block_size = cache[0].size() / num_ways;
-    cout<<"Number of read instructions per core: "<<"\n";
-    for (int i = 0; i < 4; i++) {
-        int read_count = 0;
-        for (const auto& line : inst_proc[i]) {
-            if (line.first == 'R') {
-                read_count++;
-            }
-        }
-        cout << "Core " << i << ": " << read_count << "\n";
-    }
-    cout<<"Number of write instructions per core: "<<"\n";
-    for (int i = 0; i < 4; i++) {
-        int write_count = 0;
-        for (const auto& line : inst_proc[i]) {
-            if (line.first == 'W') {
-                write_count++;
-            }
-        }
-        cout << "Core " << i << ": " << write_count << "\n";
-    }
-    
+    num_sets = cache[0].size();
+    num_ways = tag[0][0].size();
+    block_size = cache[0][0].size() / num_ways;
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
-        // Snooping
-        // Core 0
-        // Snoop on the bus using data in its cache
+        // cout current instruction
+        cout << "Current cycle: " << curr_cycle << "\n";
+        for (int i = 0; i < 4; i++) {
+            cout << "Core " << i << ": " << curr_inst[i] << "\n";
+        }
+        // cout address for top 4 inst
+        cout << "Address: " << inst_proc[0][curr_inst[0]].second << "\n";
+        cout << "Address: " << inst_proc[1][curr_inst[1]].second << "\n";
+        cout << "Address: " << inst_proc[2][curr_inst[2]].second << "\n";
+        cout << "Address: " << inst_proc[3][curr_inst[3]].second << "\n";
         if (!pending.empty()) { // transactions on the bus
+            // cout information of top instr
+            cout << "Processor ID: " << pending.front().proc_id << "\n";
+            cout << "Address: " << pending.front().address << "\n";
+            cout << "Cycles remaining: " << pending.front().cycles_remaining << "\n";
+            cout << "Read: " << (pending.front().read ? "true" : "false") << "\n";
+            cout << "Memory: " << (pending.front().mem ? "true" : "false") << "\n";
+            cout << "RWITM: " << (pending.front().rwitm ? "true" : "false") << "\n";
+            cout << "Invalidate: " << (pending.front().invalidate ? "true" : "false") << "\n";
+            cout << "Eviction: " << (pending.front().eviction ? "true" : "false") << "\n";
+            if (pending.front().cycles_remaining == -1) { // initiating transactions
+                struct BusTransaction &trans = pending.front();
+                bool found = false;
+                int ind = 0;
+                if (trans.read) {
+                    for (int i = 0; i < 4; i++) {
+                        if (i == trans.proc_id) continue; // this processor cannot snoop on self request
+                        int state = obtain_state(trans.address, tag[i], states[i]);
+                        if (state == E || state == S) {
+                            cout<<"Get from another cache"<<endl;
+                            found = true;
+                            trans.cycles_remaining = 2 * block_size;
+                            trans.mem = false;
+                            ind = i;
+                            break;
+                        } else if (state == M) { // 2N then 100
+                            found = true;
+                            ind = i;
+                            trans.mem = true;
+                            trans.cycles_remaining = 2*block_size + 100;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        trans.cycles_remaining = 100;
+                        trans.mem = true;
+                    }
+                } else { // write miss
+                    for (int i = 0; i < 4; i++) {
+                        if (i == trans.proc_id) continue; // this processor cannot snoop on self request
+                        int state = obtain_state(trans.address, tag[i], states[i]);
+                        if (state == E || state == S) {
+                            found = true;
+                            ind = i;
+                            trans.mem = true;
+                            trans.cycles_remaining = 100;
+                            trans.rwitm = true;
+                            break;
+                        } else if (state == M) { // 100 to mem then 100 from mem
+                            found = true;
+                            ind = i;
+                            trans.mem = true;
+                            trans.cycles_remaining = 200;
+                            trans.rwitm = true;
+                        }
+                    }
+                    if (!found) {
+                        trans.mem = true;
+                        trans.rwitm = true;
+                        trans.cycles_remaining = 100;
+                    }
+                }
+            }
             if (pending.front().cycles_remaining == 0) {
                 struct BusTransaction completed = pending.front();
                 int comp_id = completed.proc_id;
 
                 stall[comp_id] = false;
+                cout<<"Stall is "<<stall[comp_id]<<endl;
                 if(completed.invalidate){
                     set_state(comp_id, tag[comp_id], states[comp_id], M);
                     for(int i = 0; i<4; i++){
@@ -276,15 +374,30 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (completed.rwitm)  { // set state to M (and others to I)
+                    insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
+                    // cout states
+                    // if (curr_inst[2] == 10) exit(1);
                     set_state(completed.address, tag[comp_id], states[comp_id], M);
                     for (int i = 0; i < 4; i++) {
                         if (i == comp_id) continue;
                         set_state(completed.address, tag[i], states[i], I);
                     }
-                    insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
+                    
                 }
                 else if (completed.read) {
+                    insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
+                    
+                    // here when eviction
                     set_state(completed.address, tag[comp_id], states[comp_id], E);
+                    for (int i = 0; i < 4; i++) {
+                        int state = obtain_state(completed.address, tag[i], states[i]);
+                        cout << "State of address " << completed.address << " in processor " << i << ": ";
+                        if (state == M) cout << "M\n";
+                        else if (state == E) cout << "E\n";
+                        else if (state == S) cout << "S\n";
+                        else if (state == I) cout << "I\n";
+                        else cout << "U\n";
+                    } 
                     bool found = false;
                     for (int i = 0; i < 4; i++) {
                         if (i == comp_id) continue;
@@ -296,59 +409,30 @@ int main(int argc, char* argv[]) {
                             set_state(completed.address,tag[3],states[3],S);
                             break;
                         }
-                    }                   
-                    insert_cache_line(cache[comp_id], tag[comp_id], completed.address, is_full[comp_id], comp_id);
+                    } 
+                    // cout state of this address in all processors
+                    for (int i = 0; i < 4; i++) {
+                        int state = obtain_state(completed.address, tag[i], states[i]);
+                        cout << "State of address " << completed.address << " in processor " << i << ": ";
+                        if (state == M) cout << "M\n";
+                        else if (state == E) cout << "E\n";
+                        else if (state == S) cout << "S\n";
+                        else if (state == I) cout << "I\n";
+                        else cout << "U\n";
+                    } 
+                    
                 }
-                pending.pop_front();
-                if (!pending.empty()) { // initiating transaction
-                    struct BusTransaction trans = pending.front();
-                    bool found = false;
-                    int ind = 0;
-                    if (trans.read) {
-                        for (int i = 0; i < 4; i++) {
-                            if (i == trans.proc_id) continue; // this processor cannot snoop on self request
-                            int state = obtain_state(trans.address, tag[i], states[i]);
-                            if (state == E || state == S) {
-                                found = true;
-                                ind = i;
-                                break;
-                            } else if (state == M) { // 2N then 100
-                                found = true;
-                                ind = i;
-                                trans.mem = true;
-                                trans.cycles_remaining = 2*block_size + 100; // stall shifting
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            trans.cycles_remaining = 100;
-                            trans.mem = true;
-                        }
-                    } else { // write miss
-                        for (int i = 0; i < 4; i++) {
-                            if (i == trans.proc_id) continue; // this processor cannot snoop on self request
-                            int state = obtain_state(trans.address, tag[i], states[i]);
-                            if (state == E || state == S) {
-                                found = true;
-                                ind = i;
-                                trans.mem = true;
-                                trans.cycles_remaining = 100;
-                                trans.rwitm = true;
-                                break;
-                            } else if (state == M) { // 100 to mem then 100 from mem
-                                found = true;
-                                ind = i;
-                                trans.mem = true;
-                                trans.cycles_remaining = 200;
-                                trans.rwitm = true;
-                            }
-                        }
-                        if (!found) {
-                            trans.mem = true;
-                            trans.rwitm = true;
-                            trans.cycles_remaining = 100;
-                        }
-                    }
+                // cout popped information
+                cout << "Completed transaction for processor " << completed.proc_id << "\n";
+                cout << "Stall "<<stall[completed.proc_id]<<endl;
+                cout << "Address: " << completed.address << "\n";   
+                cout << "Read: " << (completed.read ? "true" : "false") << "\n";
+                cout << "Memory: " << (completed.mem ? "true" : "false") << "\n";   
+                cout << "RWITM: " << (completed.rwitm ? "true" : "false") << "\n";
+                cout << "Invalidate: " << (completed.invalidate ? "true" : "false") << "\n";
+                cout << "Eviction: " << (completed.eviction ? "true" : "false") << "\n";
+                if (pending.front().cycles_remaining == 0) {
+                    pending.pop_front(); 
                 }
             } else { // transaction in progress
                 pending.front().cycles_remaining--;
@@ -357,42 +441,42 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        // Core 1
-        // Snoop on the bus using data in its cache
-        // Core 2
-        // Snoop on the bus using data in its cache
-        // Core 3
-        // Snoop on the bus using data in its cache
-
-
-        // Initialize bus transactions if any
-        // Core 0
+        cout<<"OUT"<<endl;
         for (int i = 0; i < 4; i++) {
             if (curr_inst[i] < inst_proc[i].size()) {
                 pair<char, int> this_inst = inst_proc[i][curr_inst[i]];
+                cout << "Processor " << i << ": " << this_inst.first << " " << this_inst.second << "\n";
                 if (!stall[i]) {
+                    cout<<"NOT stall"<<endl;
                     if (this_inst.first == 'R') {
                         int state = obtain_state(this_inst.second, tag[i], states[i]);
                         if (state == I || state == U) {
-                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, false, false};
+                            cout<<"Stalling processor " << i << " for read\n";
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, -1, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, false, false};
                             stall[i] = true;
                             pending.push_back(new_req);
                         } else {
+                            update_access_time(this_inst.second, i);
+                            cout<<"Read hit on processor " << i << "\n";
+                            cout << "Address: " << this_inst.second << "\n";
                             curr_inst[i]++;
                         }
                     } else {
                         int state = obtain_state(this_inst.second, tag[i], states[i]);
                         if (state == I || state == U) {
-                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, false, false};
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, -1, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, false, false};
                             stall[i] = true;
                             pending.push_back(new_req);
                         }
                         else if (state == M || state==E){
                             set_state(this_inst.second, tag[i], states[i], M);
+                            update_access_time(this_inst.second, i);
                             curr_inst[i]++;
+                            cout<<"Write hit on processor " << i << "\n";
+                            cout << "Address: " << this_inst.second << "\n";
                         }
                         else {
-                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, true, false};
+                            struct BusTransaction new_req = {i, inst_proc[i][curr_inst[i]].second, 0, (inst_proc[i][curr_inst[i]].first == 'R'), false, false, true, false};
                             pending.push_back(new_req);
                             stall[i] = true;
                         }
