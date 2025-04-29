@@ -8,11 +8,7 @@ enum Cache_Line_State {
     I
 };
 
-struct BusTransaction {
-    int proc_id;        // ID of processor issuing the request
-    int address;        // memory address
-    int cycles_remaining; // time remaining for the transaction
-};
+int bus_stall = 0;
 
 void print_help() {
     cout << "Usage: ./L1simulate [options]\n"
@@ -31,12 +27,8 @@ vector<vector<vector<int>>> access_times(4);
 vector<vector<pair<char, int>>> inst_proc(4);
 vector<vector<bool>> is_full(4);
 vector<int> curr_inst(4, 0);
-vector<bool> stall(4, false);
+vector<int> stall(4, 0);
 int num_sets, num_ways, block_size;
-
-bool comp(const pair<int, int>& a, const pair<int, int>& b) {
-    return a.second < b.second; // max-heap by second
-}
 
 int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states) {
     int offset = address % block_size;
@@ -61,7 +53,6 @@ void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &stat
     int tag_value = address;
     for (int i = 0; i < num_ways; i++) {
         if (tag[index][i] == tag_value) {
-            cout<<"Successfully changed state from "<<states[index][i]<<" to "<<state<<endl;
             states[index][i] = state;
             return;
         }
@@ -139,13 +130,13 @@ void LRU(int address, vector<vector<int>> &tag, int proc_id) {
     int old_state = states[proc_id][index][way_to_remove];
     
     if (old_state == M) { // todo
-        stall[proc_id] = true;
+        stall[proc_id] += 100;
+        bus_stall += 100;
     }
     tag[index][way_to_remove] = tag_value;
-    access_times[proc_id][index][way_to_remove] = curr_cycle;
 }
 
-void update_access_time(int address, int proc_id) { // update if present
+void update_access_time(int address, int proc_id, int cycle) { // update if present
     int offset = address % block_size;
     int addr = address / block_size;
     int index = addr % num_sets;
@@ -153,7 +144,7 @@ void update_access_time(int address, int proc_id) { // update if present
     int tag_val = addr;
     for (int way = 0; way < num_ways; ++way) {
         if (tag[proc_id][index][way] == tag_val) {
-            access_times[proc_id][index][way] = curr_cycle;
+            access_times[proc_id][index][way] = cycle;
             break;
         }
     }
