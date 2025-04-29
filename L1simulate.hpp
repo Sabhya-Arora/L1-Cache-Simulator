@@ -12,11 +12,6 @@ struct BusTransaction {
     int proc_id;        // ID of processor issuing the request
     int address;        // memory address
     int cycles_remaining; // time remaining for the transaction
-    bool read;
-    bool mem;
-    bool rwitm;
-    bool invalidate;
-    bool eviction;
 };
 
 void print_help() {
@@ -38,11 +33,7 @@ vector<vector<bool>> is_full(4);
 vector<int> curr_inst(4, 0);
 vector<bool> stall(4, false);
 int num_sets, num_ways, block_size;
-deque <struct BusTransaction> pending;
-
-bool comp(const pair<int, int>& a, const pair<int, int>& b) {
-    return a.second < b.second; // max-heap by second
-}
+struct BusTransaction current_transaction;
 
 int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states) {
     int offset = address % block_size;
