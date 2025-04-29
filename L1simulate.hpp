@@ -31,7 +31,7 @@ vector<vector<vector<int>>> access_times(4);
 vector<vector<pair<char, int>>> inst_proc(4);
 vector<vector<bool>> is_full(4);
 vector<int> curr_inst(4, 0);
-vector<bool> stall(4, false);
+vector<int> stall(4, 0);
 int num_sets, num_ways, block_size;
 struct BusTransaction current_transaction;
 
@@ -136,7 +136,6 @@ void LRU(int address, vector<vector<int>> &tag, int proc_id) {
     int old_state = states[proc_id][index][way_to_remove];
     
     if (old_state == M) { // todo
-        stall[proc_id] = true;
     }
     tag[index][way_to_remove] = tag_value;
     access_times[proc_id][index][way_to_remove] = curr_cycle;
