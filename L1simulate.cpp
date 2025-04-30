@@ -70,6 +70,7 @@ int main(int argc, char* argv[]) {
     vector<int> execution_cycles(4, 0), idle_cycles(4, 0), num_misses(4, 0), total_cycles(4, -1);
     long long int bustraffic = 0;
     int invalidations = 0;
+    int total_bus_trans = 0;
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
         // out<<curr_inst[0]<<" "<<curr_inst[1]<<" "<<curr_inst[2]<<" "<<curr_inst[3]<<endl;
         // out<<curr_cycle<<endl;
@@ -101,7 +102,7 @@ int main(int argc, char* argv[]) {
                                     int otherstate = obtain_state(address, tag[j], states[j]);
                                     if (otherstate == M) { // write to mem and change the states
                                         execution_cycles[i] += 2*block_size/4 + 1; // ith core gets data and performs execution
-                                        
+                                        total_bus_trans += 2;
                                         bus_stall = 100 + 2*block_size/4 + 1;
                                         writebacks[j]++;
                                         stall[i] = 2*block_size/4 + 1;
@@ -111,6 +112,7 @@ int main(int argc, char* argv[]) {
                                         found = true;
                                         break;
                                     } else if (otherstate == E || otherstate == S) { 
+                                        total_bus_trans++;
                                         stall[i] = 2*block_size/4 + 1;
                                         execution_cycles[i] += 2*block_size/4 + 1; // ith core gets data
                                         bus_stall = 2*block_size/4 + 1;
@@ -129,6 +131,7 @@ int main(int argc, char* argv[]) {
                                     stall[i] = 101;
                                     execution_cycles[i] += 101; // ith core gets data
                                     bus_stall = 101;
+                                    total_bus_trans++;
                                     bustraffic += block_size;
                                     insert_cache_line(tag[i], address, is_full[i], i);
                                     set_state(address, tag[i], states[i], E, i);
@@ -136,7 +139,6 @@ int main(int argc, char* argv[]) {
                                 }
                                 curr_inst[i]++;
                             } else {
-                                if (i == 0) cout<<idle_cycles[i]<<endl;
                                 idle_cycles[i]++;
                             }
                         } else { // read hit
@@ -161,6 +163,7 @@ int main(int argc, char* argv[]) {
                                     if (otherstate == M) { // write to mem and change the states
                                         bus_stall = 201;
                                         stall[i] = 201;
+                                        total_bus_trans += 2;
                                         execution_cycles[i] += 101; // ith core gets data and performs execution
                                         writebacks[j]++;
                                         bustraffic += block_size*2;
@@ -171,6 +174,7 @@ int main(int argc, char* argv[]) {
                                     } else if (otherstate == E || otherstate == S) { 
                                         execution_cycles[i] += 101; // ith core gets data
                                         stall[i] = 101;
+                                        total_bus_trans++;
                                         bustraffic += block_size;
                                         bus_stall = 101;
                                         insert_cache_line(tag[i], address, is_full[i], i);
@@ -183,6 +187,7 @@ int main(int argc, char* argv[]) {
                                     // out<<"Not found write address "<<address<<endl;
                                     stall[i] = 101;
                                     bus_stall = 101;
+                                    total_bus_trans++;
                                     execution_cycles[i] += 101; // ith core gets data
                                     bustraffic += block_size;
                                     insert_cache_line(tag[i], address, is_full[i], i);
@@ -197,7 +202,6 @@ int main(int argc, char* argv[]) {
                                 }
                                 curr_inst[i]++;
                             } else {
-                                if (i == 0) cout<<idle_cycles[i]<<endl;
                                 idle_cycles[i]++;
                             }
                         } else { // write hit
@@ -214,7 +218,6 @@ int main(int argc, char* argv[]) {
                                     curr_inst[i]++;
                                     execution_cycles[i]++;
                                 } else {
-                                    if (i == 0) cout<<"write hit "<<idle_cycles[i]<<endl;
                                     idle_cycles[i]++;
                                 }
                             } else { // E or M
@@ -255,6 +258,7 @@ int main(int argc, char* argv[]) {
     }
     
     out << "Overall Bus Summary:\n";
+    out << "Total Bus Transactions: " << total_bus_trans << "\n";
     out << "Bus Invalidations: " << invalidations << "\n";
     out << "Total Bus Traffic (Bytes): " << bustraffic << "\n";
     
