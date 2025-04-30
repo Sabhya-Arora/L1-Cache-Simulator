@@ -28,7 +28,10 @@ vector<vector<pair<char, int>>> inst_proc(4);
 vector<vector<bool>> is_full(4);
 vector<int> curr_inst(4, 0);
 vector<int> stall(4, 0);
-int num_sets, num_ways, block_size;
+vector<int> evictions(4, 0);
+vector<int> writebacks(4, 0);
+vector<int> invalidations(4, 0);
+int num_sets, num_ways = -1, block_size;
 
 int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states) {
     int offset = address % block_size;
@@ -44,7 +47,7 @@ int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &st
     return U;
 }
 
-void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states, int state) {
+void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states, int state, int proc_id) {
     int temp = address;
     int offset = address % block_size;
     address/=block_size;
@@ -53,6 +56,7 @@ void set_state (int address, vector<vector<int>> &tag, vector<vector<int>> &stat
     int tag_value = address;
     for (int i = 0; i < num_ways; i++) {
         if (tag[index][i] == tag_value) {
+            if (state == I) invalidations[proc_id]++;
             states[index][i] = state;
             return;
         }
@@ -133,6 +137,7 @@ void LRU(int address, vector<vector<int>> &tag, int proc_id) {
         stall[proc_id] += 100;
         bus_stall += 100;
     }
+    cout<<proc_id<<" "<<"Evicting address: "<<old_addr<<" with "<<address*num_sets*block_size+index*block_size+offset<<endl;
     tag[index][way_to_remove] = tag_value;
 }
 
@@ -144,6 +149,7 @@ void update_access_time(int address, int proc_id, int cycle) { // update if pres
     int tag_val = addr;
     for (int way = 0; way < num_ways; ++way) {
         if (tag[proc_id][index][way] == tag_val) {
+            cout<<"Updating access time for address: "<<address<<" to "<<cycle<<endl;
             access_times[proc_id][index][way] = cycle;
             break;
         }
@@ -159,16 +165,21 @@ void insert_cache_line (vector<vector<int>> &tag, int address, vector<bool> &is_
     address/=num_sets;
     int tag_value = address;
     if (is_full[index]) {
-        LRU(temp, tag, proc_id);
+        evictions[proc_id]++;
+        writebacks[proc_id]++;
+        LRU(temp, tag, proc_id);    
     } else {
+        cout<<"trying to add address: "<<address*num_sets*block_size+index*block_size+offset<<" to cache line "<<index<<endl;
         int i = 0;
         for (i = 0; i < num_ways; i++) {
+            cout<<tag[index][i]<<" ";
             if (tag[index][i] == -1) {
+                cout<<"Adding address: "<<address*num_sets*block_size+index*block_size+offset<<" to cache line "<<index<<endl;
                 tag[index][i] = tag_value;
-                access_times[proc_id][index][i] = curr_cycle;
                 break;
             }
         }
+        cout<<endl;
         if (i == num_ways) {
             is_full[index] = true;
         }
