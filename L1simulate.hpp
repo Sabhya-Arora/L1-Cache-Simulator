@@ -137,7 +137,6 @@ void LRU(int address, vector<vector<int>> &tag, int proc_id) {
     
     if (old_state == M) { // todo
         trafficpercore[proc_id] += block_size;
-        total_bus_trans++;
         execution_cycles[proc_id] += 100;
         bustraffic += block_size;
         stall[proc_id] += 100;

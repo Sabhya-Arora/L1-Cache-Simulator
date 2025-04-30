@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
                                     int otherstate = obtain_state(address, tag[j], states[j]);
                                     if (otherstate == M) { // write to mem and change the states
                                         execution_cycles[i] += 2*block_size/4 + 1; // ith core gets data and performs execution
-                                        total_bus_trans += 2;
+                                        total_bus_trans += 1;
                                         bus_stall = 100 + 2*block_size/4 + 1;
                                         writebacks[j]++;
                                         stall[i] = 2*block_size/4 + 1;
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
                                         bus_stall = 201;
                                         stall[i] = 201;
                                         idle_cycles[i] += 100;
-                                        total_bus_trans += 2;
+                                        total_bus_trans += 1;
                                         execution_cycles[i] += 101; // ith core gets data and performs execution
                                         writebacks[j]++;
                                         bustraffic += block_size*2;
@@ -244,6 +244,7 @@ int main(int argc, char* argv[]) {
                                     }
                                     invalidations++;
                                     invalidations_per_core[i]++;
+                                    total_bus_trans++;
                                     curr_inst[i]++;
                                     execution_cycles[i]++;
                                 } else {
