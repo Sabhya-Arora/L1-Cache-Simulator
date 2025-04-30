@@ -184,6 +184,7 @@ int main(int argc, char* argv[]) {
                                     if (otherstate == M) { // write to mem and change the states
                                         bus_stall = 201;
                                         stall[i] = 201;
+                                        idle_cycles[i] += 100;
                                         total_bus_trans += 2;
                                         execution_cycles[i] += 101; // ith core gets data and performs execution
                                         writebacks[j]++;
@@ -283,8 +284,8 @@ int main(int argc, char* argv[]) {
         out << "Cache Miss Rate: " << fixed << setprecision(2) << (100.0 * num_misses[i] / total_instructions) << "%\n";
         out << "Cache Evictions: " << evictions[i] << "\n";
         out << "Writebacks: " << writebacks[i] << "\n";
-        out<<"Bus invalidations: "<<invalidations_per_core[i]<<"\n";
-        out<<"Data traffic (Bytes): "<<trafficpercore[i]<<" Bytes\n\n";
+        out<<"Bus Invalidations: "<<invalidations_per_core[i]<<"\n";
+        out<<"Data Traffic (Bytes): "<<trafficpercore[i]<<"\n\n";
     }
     
     out << "Overall Bus Summary:\n";
