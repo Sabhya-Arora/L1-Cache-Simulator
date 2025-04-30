@@ -1,6 +1,5 @@
 #include <bits/stdc++.h>
 #include "L1simulate.hpp"
-#include "L1simulate.hpp"
 using namespace std;
 
 
@@ -103,18 +102,18 @@ int main(int argc, char* argv[]) {
                                     if (otherstate == M) { // write to mem and change the states
                                         execution_cycles[i] += 2*block_size/4 + 1; // ith core gets data and performs execution
                                         
-                                        bus_stall = 100 + 2*block_size/4;
+                                        bus_stall = 100 + 2*block_size/4 + 1;
                                         writebacks[j]++;
-                                        stall[i] = 2*block_size/4;
+                                        stall[i] = 2*block_size/4 + 1;
                                         bustraffic += block_size*2;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 2*block_size/4);
                                         found = true;
                                         break;
                                     } else if (otherstate == E || otherstate == S) { 
-                                        stall[i] = 2*block_size/4;
+                                        stall[i] = 2*block_size/4 + 1;
                                         execution_cycles[i] += 2*block_size/4 + 1; // ith core gets data
-                                        bus_stall = 2*block_size/4;
+                                        bus_stall = 2*block_size/4 + 1;
                                         bustraffic += block_size;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 2*block_size/4);
@@ -127,9 +126,9 @@ int main(int argc, char* argv[]) {
                                         set_state(address, tag[j], states[j], S, j);
                                     }
                                 } else {
-                                    stall[i] = 100;
+                                    stall[i] = 101;
                                     execution_cycles[i] += 101; // ith core gets data
-                                    bus_stall = 100;
+                                    bus_stall = 101;
                                     bustraffic += block_size;
                                     insert_cache_line(tag[i], address, is_full[i], i);
                                     set_state(address, tag[i], states[i], E, i);
@@ -137,6 +136,7 @@ int main(int argc, char* argv[]) {
                                 }
                                 curr_inst[i]++;
                             } else {
+                                if (i == 0) cout<<idle_cycles[i]<<endl;
                                 idle_cycles[i]++;
                             }
                         } else { // read hit
@@ -159,8 +159,8 @@ int main(int argc, char* argv[]) {
                                     }
                                     int otherstate = obtain_state(address, tag[j], states[j]);
                                     if (otherstate == M) { // write to mem and change the states
-                                        bus_stall = 200;
-                                        stall[i] = 200;
+                                        bus_stall = 201;
+                                        stall[i] = 201;
                                         execution_cycles[i] += 101; // ith core gets data and performs execution
                                         writebacks[j]++;
                                         bustraffic += block_size*2;
@@ -170,9 +170,9 @@ int main(int argc, char* argv[]) {
                                         break;
                                     } else if (otherstate == E || otherstate == S) { 
                                         execution_cycles[i] += 101; // ith core gets data
-                                        stall[i] = 100;
+                                        stall[i] = 101;
                                         bustraffic += block_size;
-                                        bus_stall = 100;
+                                        bus_stall = 101;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 100);
                                         found = true;
@@ -181,8 +181,8 @@ int main(int argc, char* argv[]) {
                                 }
                                 if (!found) {
                                     // out<<"Not found write address "<<address<<endl;
-                                    stall[i] = 100;
-                                    bus_stall = 100;
+                                    stall[i] = 101;
+                                    bus_stall = 101;
                                     execution_cycles[i] += 101; // ith core gets data
                                     bustraffic += block_size;
                                     insert_cache_line(tag[i], address, is_full[i], i);
@@ -197,6 +197,7 @@ int main(int argc, char* argv[]) {
                                 }
                                 curr_inst[i]++;
                             } else {
+                                if (i == 0) cout<<idle_cycles[i]<<endl;
                                 idle_cycles[i]++;
                             }
                         } else { // write hit
@@ -213,6 +214,7 @@ int main(int argc, char* argv[]) {
                                     curr_inst[i]++;
                                     execution_cycles[i]++;
                                 } else {
+                                    if (i == 0) cout<<"write hit "<<idle_cycles[i]<<endl;
                                     idle_cycles[i]++;
                                 }
                             } else { // E or M
