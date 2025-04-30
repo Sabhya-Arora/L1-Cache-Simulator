@@ -289,7 +289,7 @@ int main(int argc, char* argv[]) {
     
     out << "Overall Bus Summary:\n";
     out << "Total Bus Transactions: " << total_bus_trans << "\n";
-    out << "Bus Invalidations: " << invalidations << "\n";
+    // out << "Bus Invalidations: " << invalidations << "\n";
     out << "Total Bus Traffic (Bytes): " << bustraffic << "\n";
     int max_exec_time = 0;
     for (int i = 0; i < 4; ++i) {
