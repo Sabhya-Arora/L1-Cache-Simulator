@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
     //     }
     //     out << "Core " << i << " - Reads: " << read_count << ", Writes: " << write_count << endl;
     // }
-    vector<int> execution_cycles(4, 0), idle_cycles(4, 0), num_misses(4, 0), total_cycles(4, -1);
+    vector<int> execution_cycles(4, 0), idle_cycles(4, 0), num_misses(4, 0), total_cycles(4, -1), invalidations_per_core(4, 0), trafficpercore(4, 0);
     long long int bustraffic = 0;
     int invalidations = 0;
     int total_bus_trans = 0;
@@ -124,6 +124,8 @@ int main(int argc, char* argv[]) {
                                         bus_stall = 100 + 2*block_size/4 + 1;
                                         writebacks[j]++;
                                         stall[i] = 2*block_size/4 + 1;
+                                        trafficpercore[j] += block_size;
+                                        trafficpercore[i] += block_size;
                                         bustraffic += block_size*2;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 2*block_size/4);
@@ -135,6 +137,8 @@ int main(int argc, char* argv[]) {
                                         execution_cycles[i] += 2*block_size/4 + 1; // ith core gets data
                                         bus_stall = 2*block_size/4 + 1;
                                         bustraffic += block_size;
+                                        trafficpercore[j] += block_size;
+                                        trafficpercore[i] += block_size;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 2*block_size/4);
                                         found = true;
@@ -149,6 +153,7 @@ int main(int argc, char* argv[]) {
                                     stall[i] = 101;
                                     execution_cycles[i] += 101; // ith core gets data
                                     bus_stall = 101;
+                                    trafficpercore[i] += block_size;
                                     total_bus_trans++;
                                     bustraffic += block_size;
                                     insert_cache_line(tag[i], address, is_full[i], i);
@@ -185,6 +190,8 @@ int main(int argc, char* argv[]) {
                                         execution_cycles[i] += 101; // ith core gets data and performs execution
                                         writebacks[j]++;
                                         bustraffic += block_size*2;
+                                        trafficpercore[j] += block_size;
+                                        trafficpercore[i] += block_size;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 200);
                                         found = true;
@@ -194,6 +201,8 @@ int main(int argc, char* argv[]) {
                                         stall[i] = 101;
                                         total_bus_trans++;
                                         bustraffic += block_size;
+                                        trafficpercore[j] += block_size;
+                                        trafficpercore[i] += block_size;
                                         bus_stall = 101;
                                         insert_cache_line(tag[i], address, is_full[i], i);
                                         update_access_time(address, i, curr_cycle + 100);
@@ -208,10 +217,12 @@ int main(int argc, char* argv[]) {
                                     total_bus_trans++;
                                     execution_cycles[i] += 101; // ith core gets data
                                     bustraffic += block_size;
+                                    trafficpercore[i] += block_size;
                                     insert_cache_line(tag[i], address, is_full[i], i);
                                     update_access_time(address, i, curr_cycle + 100);
                                 } else {
                                     invalidations++;
+                                    invalidations_per_core[i]++;
                                 }
                                 for (int j = 0; j < 4; j++) {
                                     if (i == j) set_state(address, tag[j], states[j], M, j);
@@ -233,6 +244,7 @@ int main(int argc, char* argv[]) {
                                         set_state(address, tag[j], states[j], I, j);
                                     }
                                     invalidations++;
+                                    invalidations_per_core[i]++;
                                     curr_inst[i]++;
                                     execution_cycles[i]++;
                                 } else {
@@ -272,7 +284,9 @@ int main(int argc, char* argv[]) {
         out << "Cache Misses: " << num_misses[i] << "\n";
         out << "Cache Miss Rate: " << fixed << setprecision(2) << (100.0 * num_misses[i] / total_instructions) << "%\n";
         out << "Cache Evictions: " << evictions[i] << "\n";
-        out << "Writebacks: " << writebacks[i] << "\n\n";
+        out << "Writebacks: " << writebacks[i] << "\n";
+        out<<"Bus invalidations: "<<invalidations_per_core[i]<<"\n";
+        out<<"Data traffic (Bytes): "<<trafficpercore[i]<<" Bytes\n\n";
     }
     
     out << "Overall Bus Summary:\n";
