@@ -3,7 +3,6 @@
 ### Requirements
 - C++ compiler (e.g., `g++`)
 - Unix-like environment (Linux, WSL, or macOS)
-- [Optional] Python (for plotting)
 
 ### Using Makefile
 
