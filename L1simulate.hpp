@@ -178,12 +178,11 @@ void insert_cache_line (vector<vector<int>> &tag, int address, vector<bool> &is_
             if (tag[index][i] == -1) {
                 // cout<<"Adding address: "<<address*num_sets*block_size+index*block_size+offset<<" to cache line "<<index<<endl;
                 tag[index][i] = tag_value;
+                if (i == num_ways - 1) {
+                    is_full[index] = true;
+                }
                 break;
             }
-        }
-        // cout<<endl;
-        if (i == num_ways) {
-            is_full[index] = true;
         }
     }
 }

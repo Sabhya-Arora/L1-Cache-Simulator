@@ -67,8 +67,7 @@ int main(int argc, char* argv[]) {
     //     }
     //     out << "Core " << i << " - Reads: " << read_count << ", Writes: " << write_count << endl;
     // }
-    vector<int> execution_cycles(4, 0), idle_cycles(4, 0), num_misses(4, 0), total_cycles(4, -1), invalidations_per_core(4, 0), trafficpercore(4, 0);
-    long long int bustraffic = 0;
+
     int invalidations = 0;
     int total_bus_trans = 0;
     int block_size_bytes = 1 << b;
@@ -97,7 +96,7 @@ int main(int argc, char* argv[]) {
         
         for (int i = 0; i < 4; i++) {
             if (total_cycles[i] == -1) {
-                if (total_cycles[i] >= inst_proc[i].size()) {
+                if (curr_inst[i] >= inst_proc[i].size()) {
                     total_cycles[i] = curr_cycle + stall[i];
                 }
             }
@@ -293,6 +292,10 @@ int main(int argc, char* argv[]) {
     out << "Total Bus Transactions: " << total_bus_trans << "\n";
     out << "Bus Invalidations: " << invalidations << "\n";
     out << "Total Bus Traffic (Bytes): " << bustraffic << "\n";
-    
+    int max_exec_time = 0;
+    for (int i = 0; i < 4; ++i) {
+        max_exec_time = max(max_exec_time, total_cycles[i]);
+    }
+    // out<<"Maximum execution time: "<<max_exec_time<<endl;
     return 0;
 }
