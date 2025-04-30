@@ -71,6 +71,24 @@ int main(int argc, char* argv[]) {
     long long int bustraffic = 0;
     int invalidations = 0;
     int total_bus_trans = 0;
+    int block_size_bytes = 1 << b;
+    int num_sets = 1 << s;
+    int cache_size_bytes = num_sets * num_ways * block_size_bytes;
+    int cache_size_kb = cache_size_bytes / 1024;
+
+    out << "Simulation Parameters:\n";
+    out << "Trace Prefix: " << tracefile << "\n";
+    out << "Set Index Bits: " << s << "\n";
+    out << "Associativity: " << num_ways << "\n";
+    out << "Block Bits: " << b << "\n";
+    out << "Block Size (Bytes): " << block_size_bytes << "\n";
+    out << "Number of Sets: " << num_sets << "\n";
+    out << "Cache Size (KB per core): " << cache_size_kb << "\n";
+    out << "MESI Protocol: Enabled\n";
+    out << "Write Policy: Write-back, Write-allocate\n";
+    out << "Replacement Policy: LRU\n";
+    out << "Bus: Central snooping bus\n\n";
+
     while (curr_inst[0] < inst_proc[0].size() || curr_inst[1] < inst_proc[1].size() || curr_inst[2] < inst_proc[2].size() || curr_inst[3] < inst_proc[3].size()) {
         // out<<curr_inst[0]<<" "<<curr_inst[1]<<" "<<curr_inst[2]<<" "<<curr_inst[3]<<endl;
         // out<<curr_cycle<<endl;
