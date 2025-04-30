@@ -32,6 +32,8 @@ vector<int> evictions(4, 0);
 vector<int> writebacks(4, 0);
 vector<int> execution_cycles(4, 0), idle_cycles(4, 0), num_misses(4, 0), total_cycles(4, -1), invalidations_per_core(4, 0), trafficpercore(4, 0);
 long long int bustraffic = 0;
+int invalidations = 0;
+int total_bus_trans = 0;
 int num_sets, num_ways = -1, block_size;
 
 int obtain_state (int address, vector<vector<int>> &tag, vector<vector<int>> &states) {
@@ -135,6 +137,8 @@ void LRU(int address, vector<vector<int>> &tag, int proc_id) {
     
     if (old_state == M) { // todo
         trafficpercore[proc_id] += block_size;
+        total_bus_trans++;
+        execution_cycles[proc_id] += 100;
         bustraffic += block_size;
         stall[proc_id] += 100;
         writebacks[proc_id]++;

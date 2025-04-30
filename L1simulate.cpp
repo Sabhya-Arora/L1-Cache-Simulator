@@ -68,8 +68,7 @@ int main(int argc, char* argv[]) {
     //     out << "Core " << i << " - Reads: " << read_count << ", Writes: " << write_count << endl;
     // }
 
-    int invalidations = 0;
-    int total_bus_trans = 0;
+
     int block_size_bytes = 1 << b;
     int num_sets = 1 << s;
     int cache_size_bytes = num_sets * num_ways * block_size_bytes;
