@@ -133,6 +133,7 @@ void LRU(int address, vector<vector<int>> &tag, int proc_id) {
     
     if (old_state == M) { // todo
         stall[proc_id] += 100;
+        writebacks[proc_id]++;
         bus_stall += 100;
     }
     // cout<<proc_id<<" "<<"Evicting address: "<<old_addr<<" with "<<address*num_sets*block_size+index*block_size+offset<<endl;
@@ -164,7 +165,6 @@ void insert_cache_line (vector<vector<int>> &tag, int address, vector<bool> &is_
     int tag_value = address;
     if (is_full[index]) {
         evictions[proc_id]++;
-        writebacks[proc_id]++;
         LRU(temp, tag, proc_id);    
     } else {
         // cout<<"trying to add address: "<<address*num_sets*block_size+index*block_size+offset<<" to cache line "<<index<<endl;
